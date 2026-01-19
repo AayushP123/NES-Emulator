@@ -8,6 +8,43 @@ struct Cpu {
     sp : u8, // Used for temporary state and tracks top of stack
     mem_buffer : [u8 ; 65536], // Each index holds one byte in the CPU
 }
+
+// Attach behaviour to CPU
+impl Cpu {
+    // Fetch byte, read one byte and interpret it, then advance PC by one
+    fn fetch_byte(&mut self) -> u8 {
+        let byte = self.mem_buffer[self.pc as usize];
+        self.pc = self.pc.wrapping_add(1);
+        byte
+    }
+    
+    // Modifies CPU state
+    fn step(&mut self) -> bool{
+
+        // Reads byte from current PC in memory
+        let opcode = self.mem_buffer[self.pc as usize];
+
+        // Interprets the opcode (0xA9 means LDA immediate, meaning the next byte is the value not the address)
+        if (opcode == 0xA9) {
+            let value = self.fetch_byte(); // opcode value is set to the byte
+            self.a = value;
+            println!("pc = 0x{:04X} and a = {:02X}", self.pc, self.a);
+            true
+        } else if (opcode == 0x00) {
+            false
+        }
+        else {
+            panic!(
+            "Unknown opcode {:02X}, Unknown value {:02X}", opcode, self.a
+            )
+        }
+    }
+
+    fn reset (&mut self) {
+        self.pc = 0x8000;
+        self.a = 0;
+    }
+}
 fn main() {
     // Mutable CPU values, set start to index of first pc value
     let mut cpu = Cpu {
@@ -26,21 +63,5 @@ fn main() {
     cpu.mem_buffer[start + 1] = 0x10;
     cpu.mem_buffer[start + 2] = 0x00;
 
-    // Starts loop at "start" opcode
-    loop {
-        let opcode = cpu.mem_buffer[cpu.pc as usize];
-        if (opcode == 0xA9) {
-            cpu.pc += 1;
-            let value = cpu.mem_buffer[cpu.pc as usize];
-            cpu.a = value;
-            cpu.pc += 1;
-            print!("pc = 0x{:04X} and a = {:02X}", cpu.pc, cpu.a);
-        }
-        else if (opcode == 0x00){
-            break;
-    }
-}
-    return;
-
-
+    while cpu.step() {}
 }
