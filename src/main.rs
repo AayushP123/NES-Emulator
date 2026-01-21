@@ -13,16 +13,23 @@ struct Cpu {
 impl Cpu {
     // Fetch byte, read one byte and interpret it, then advance PC by one
     fn fetch_byte(&mut self) -> u8 {
-        let byte = self.mem_buffer[self.pc as usize];
+        let byte = self.read(self.pc);
         self.pc = self.pc.wrapping_add(1);
         byte
     }
-    
+
+
+    fn fetch_word(&mut self) -> u16 {
+        let low = self.fetch_byte();
+        let high = self.fetch_byte();
+        (low as u16) | ((high as u16) << 8)
+    }
+
     // Modifies CPU state
     fn step(&mut self) -> bool{
 
         // Reads byte from current PC in memory
-        let opcode = self.mem_buffer[self.pc as usize];
+        let opcode = self.fetch_byte();
 
         // Interprets the opcode (0xA9 means LDA immediate, meaning the next byte is the value not the address)
         if (opcode == 0xA9) {
@@ -44,6 +51,16 @@ impl Cpu {
         self.pc = 0x8000;
         self.a = 0;
     }
+
+    // Read takes address, and asks for the byte from the memory at that address index
+    fn read (&self, addr : u16) -> u8 {
+        self.mem_buffer[addr as usize]
+    }
+
+    // Write takes address, converts it to array index, and stores byte at that memory location
+    fn write (&mut self, addr : u16, data : u8) {
+        self.mem_buffer[addr as usize] = data;
+    }
 }
 fn main() {
     // Mutable CPU values, set start to index of first pc value
@@ -56,12 +73,12 @@ fn main() {
         p: 0x24,
         mem_buffer: [0; 65536]
     };
-    let start = cpu.pc as usize;
+    let start = cpu.pc;
 
     // load program
-    cpu.mem_buffer[start] = 0xA9;
-    cpu.mem_buffer[start + 1] = 0x10;
-    cpu.mem_buffer[start + 2] = 0x00;
+    cpu.write(start, 0xA9);
+    cpu.write(start.wrapping_add(1), 0x10);
+    cpu.write(start.wrapping_add(2), 0x00);
 
     while cpu.step() {}
 }
