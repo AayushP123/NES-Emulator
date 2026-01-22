@@ -35,9 +35,24 @@ impl Cpu {
         if (opcode == 0xA9) {
             let value = self.fetch_byte(); // opcode value is set to the byte
             self.a = value;
+            self.set_flag(self.a);
             println!("pc = 0x{:04X} and a = {:02X}", self.pc, self.a);
             true
-        } else if (opcode == 0x00) {
+        } else if (opcode == 0xA0) {
+            let value = self.fetch_byte();
+            self.y = value;
+            self.set_flag(self.y);
+            println!("pc = 0x{:04X} and y = {:02X}", self.pc, self.y);
+            true
+        }
+        else if (opcode == 0xA2) {
+            let value = self.fetch_byte();
+            self.x = value;
+            self.set_flag(self.x);
+            println!("pc = 0x{:04X} and x = {:02X}", self.pc, self.x);
+            true
+        }
+        else if (opcode == 0x00) {
             false
         }
         else {
@@ -60,6 +75,23 @@ impl Cpu {
     // Write takes address, converts it to array index, and stores byte at that memory location
     fn write (&mut self, addr : u16, data : u8) {
         self.mem_buffer[addr as usize] = data;
+    }
+    const FLAG_ZERO : u8 = 0b0000_0010;
+    const FLAG_NEG : u8 = 0b1000_0000;
+
+    fn set_flag(&mut self, val : u8) {
+
+        if(val == 0x00) {
+            self.p |= Self::FLAG_ZERO
+        } else{
+            self.p &= !Self::FLAG_ZERO
+        }
+
+        if (val & 0x80) != 0 {
+            self.p |= Self::FLAG_NEG
+        } else{
+            self.p &= !Self::FLAG_NEG
+        }
     }
 }
 fn main() {
