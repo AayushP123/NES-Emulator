@@ -11,13 +11,61 @@ struct Cpu {
 
 impl Cpu {
     // Fetch byte at PC, then increment PC
+    // Immediate opcode
     fn fetch_byte(&mut self) -> u8 {
         let byte = self.read(self.pc);
         self.pc = self.pc.wrapping_add(1);
         byte
     }
 
-    // Fetch 16-bit word (little-endian) from instruction stream
+    // Addressing opcode
+    // Fetches 1 byte address
+    fn addr_zero_page(&mut self) -> u16 {
+        self.fetch_byte() as u16
+    }
+
+    // Byte + X, wraps around the zero page to make sure it doesn't go outta bounds
+    fn addr_zero_page_x(&mut self) -> u16 {
+        self.fetch_byte().wrapping_add(self.x) as u16
+    }
+
+    // Byte + Y, same idea, used by LDX or STX
+    fn addr_zero_page_y(&mut self) -> u16 {
+        self.fetch_byte().wrapping_add(self.y) as u16
+    }
+
+    // Fetch the full 16-bit address (This is the actual 16-bit being pulled)
+    fn addr_absolute(&mut self) -> u16 {
+        self.fetch_word()
+    }
+
+    // Fetches full 2-byte address, adds X to it.
+    fn addr_absolute_x(&mut self) -> u16 {
+        self.fetch_word().wrapping_add(self.x as u16)
+    }
+
+    // Fetches full 2-byte address, adds Y to it
+    fn addr_absolute_y (&mut self) -> u16 {
+        self.fetch_word().wrapping_add(self.y as u16)
+    }
+
+    // Add X to byte, lookup the pointer
+    fn addr_indirect_x(&mut self) -> u16 {
+        let base = self.fetch_byte().wrapping_add(self.x);
+        let lo = self.read(base as u16) as u16;
+        let hi = self.read(base.wrapping_add(1) as u16) as u16;
+        lo | (hi << 8)
+    }
+
+    // Read byte, lookup the pointer, THEN add Y
+    fn addr_indirect_y(&mut self) -> u16 {
+        let base = self.fetch_byte()
+        let lo = self.read(base as u16) as u16;
+        let hi = self.read(base.wrapping_add(1) as u16) as u16;
+        let ptr = lo | (hi << 8);
+        ptr.wrapping_add(self.y as u16);
+    }
+    // Fetch 16-bit word (little-endian) from instruction stream (This is the function)
     fn fetch_word(&mut self) -> u16 {
         let low = self.fetch_byte();
         let high = self.fetch_byte();
@@ -192,6 +240,8 @@ impl Cpu {
     fn write(&mut self, addr: u16, data: u8) {
         self.mem_buffer[addr as usize] = data;
     }
+
+    // Addressing opcodes
 
     const FLAG_ZERO: u8 = 0b0000_0010;
     const FLAG_NEG: u8 = 0b1000_0000;
