@@ -119,6 +119,104 @@ impl Cpu {
         let opcode = self.fetch_byte();
 
         match opcode {
+            // Compare Accumulator opcodes
+            0xC9 => {
+                let val = self.fetch_byte();
+                self.compare(self.a, val);
+                true
+            }
+            
+            0xC5 => {
+                let addr = self.addr_zero_page();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            0xD5 => {
+                let addr = self.addr_zero_page_x();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            0xCD => {
+                let addr = self.addr_absolute();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            0xDD => {
+                let addr = self.addr_absolute_x();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            0xD9 => {
+                let addr = self.addr_absolute_y();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            0xC1 => {
+                let addr = self.addr_indirect_x();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            0xD1 => {
+                let addr = self.addr_indirect_y();
+                let val = self.read(addr);
+                self.compare(self.a, val);
+                true
+            }
+
+            // Compare X Register
+            0xE0 => {
+                let val = self.fetch_byte();
+                self.compare(self.x, val);
+                true
+            }
+
+            0xE4 => {
+                let addr = self.addr_zero_page();
+                let val = self.read(addr);
+                self.compare(self.x, val);
+                true
+            }
+
+            0xEC => {
+                let addr = self.addr_absolute();
+                let val = self.read(addr);
+                self.compare(self.x, val);
+                true
+            }
+
+            // Compare Y Register
+            0xC0 => {
+                let val = self.fetch_byte();
+                self.compare(self.y, val);
+                true
+            }
+
+            0xC4 => {
+                let addr = self.addr_zero_page();
+                let val = self.read(addr);
+                self.compare(self.y, val);
+                true
+            }
+
+            0xCC => {
+                let addr = self.addr_absolute();
+                let val = self.read(addr);
+                self.compare(self.y, val);
+                true
+            }
+
             // Load Accumulator opcodes
             0xA9 => { // Immediate
                 let value = self.fetch_byte();
@@ -379,9 +477,27 @@ impl Cpu {
 
     // Addressing opcodes
 
-    const FLAG_ZERO: u8 = 0b0000_0010;
-    const FLAG_NEG: u8 = 0b1000_0000;
+    const FLAG_CARRY: u8     = 0b0000_0001;
+    const FLAG_ZERO: u8      = 0b0000_0010;
+    const FLAG_INTERRUPT: u8 = 0b0000_0100;
+    const FLAG_DECIMAL: u8   = 0b0000_1000;
+    const FLAG_BREAK: u8     = 0b0001_0000;
+    const FLAG_BREAK2: u8    = 0b0010_0000;
+    const FLAG_OVERFLOW: u8  = 0b0100_0000;
+    const FLAG_NEG: u8       = 0b1000_0000;
 
+    // Compare function for funcs: CMP, CPX, CPY
+    fn compare(&mut self, reg: u8, val: u8) {
+        let res = reg.wrapping_sub(val);
+
+        if reg >= val{
+            self.p |= Self::FLAG_CARRY;
+        } else{
+            self.p &= !Self::FLAG_CARRY;
+        }
+
+        self.set_zn(res);
+    }
     // Update Z and N based on value
     fn set_zn(&mut self, val: u8) {
         if val == 0 {
