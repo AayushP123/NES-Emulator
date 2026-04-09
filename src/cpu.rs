@@ -119,13 +119,108 @@ impl Cpu {
         let opcode = self.fetch_byte();
 
         match opcode {
+            // Flag Toggles
+            0x38 => { // Set Carry Flag
+                self.p |= Self::FLAG_CARRY;
+                true
+            }
+
+            0x18 => { // Clear Carry Flag
+                self.p &= !Self::FLAG_CARRY;
+                true
+            }
+
+            0x78 => { // Set Interrupt Disable
+                self.p |= Self::FLAG_INTERRUPT;
+                true
+            }
+
+            0x58 => { // Clear Interrupt Disable
+                self.p &= !Self::FLAG_INTERRUPT;
+                true
+            }
+
+            0xF8 => { // Set Decimal Flag
+                self.p |= Self::FLAG_DECIMAL;
+                true
+            }
+
+            0xD8 => { // Clear Decimal Flag
+                self.p &= !Self::FLAG_DECIMAL;
+                true
+            }
+
+            0xB8 => { // Clear Overflow Flag
+                self.p &= !Self::FLAG_OVERFLOW;
+                true
+            }
+
+            // Bitwise Logic (Immediate Mode)
+            0x29 => { // Logical AND
+                let value = self.fetch_byte();
+                self.a &= value;
+                self.set_zn(self.a);
+                true
+            }
+            0x09 => { // Logical Inclusive OR
+                let value = self.fetch_byte();
+                self.a |= value;
+                self.set_zn(self.a);
+                true
+            }
+            0x49 => { // Exclusive OR (XOR)
+                let value = self.fetch_byte();
+                self.a ^= value;
+                self.set_zn(self.a);
+                true
+            }
+            
+            // Branching opcode
+            0x90 => {
+                self.branch((self.p & Self::FLAG_CARRY) == 0);
+                true
+            }
+
+            0xB0 => {
+                self.branch((self.p & Self::FLAG_CARRY) != 0);
+                true
+            }
+
+            0xD0 => {
+                self.branch((self.p & Self::FLAG_ZERO) == 0);
+                true
+            }
+            0xF0 => {
+                self.branch((self.p & Self::FLAG_ZERO) != 0);
+                true
+            }
+
+            0x10 => {
+                self.branch((self.p & Self::FLAG_NEG) == 0);
+                true
+            }
+            0x30 => {
+                self.branch((self.p & Self::FLAG_NEG) != 0);
+                true
+            }
+
+            0x50 => {
+                self.branch((self.p & Self::FLAG_OVERFLOW) == 0);
+                true
+            }
+
+            0x70 => {
+                self.branch((self.p & Self::FLAG_OVERFLOW) != 0);
+                true
+            }
+
             // Compare Accumulator opcodes
             0xC9 => {
                 let val = self.fetch_byte();
                 self.compare(self.a, val);
                 true
             }
-            
+
             0xC5 => {
                 let addr = self.addr_zero_page();
                 let val = self.read(addr);
@@ -498,6 +593,16 @@ impl Cpu {
 
         self.set_zn(res);
     }
+
+    // Helper for all branching instructions
+    fn branch(&mut self, condition: bool) {
+        let offset = self.fetch_byte() as i8;
+
+        if condition {
+            self.pc = self.pc.wrapping_add_signed(offset as i16);
+        }
+    }
+
     // Update Z and N based on value
     fn set_zn(&mut self, val: u8) {
         if val == 0 {
