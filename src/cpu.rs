@@ -119,6 +119,118 @@ impl Cpu {
         let opcode = self.fetch_byte();
 
         match opcode {
+            // ADC: Add with Carry opcodes
+            0x69 => {
+                let val = self.fetch_byte();
+                self.adc(val);
+                true
+            }
+
+            0x65 => {
+                let addr = self.addr_zero_page();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            0x75 => {
+                let addr = self.addr_zero_page_x();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            0x6D => {
+                let addr = self.addr_absolute();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            0x7D => {
+                let addr = self.addr_absolute_x();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            0x79 => {
+                let addr = self.addr_absolute_y();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            0x61 => {
+                let addr = self.addr_indirect_x();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            0x71 => {
+                let addr = self.addr_indirect_y();
+                let val = self.read(addr);
+                self.adc(val);
+                true
+            }
+
+            // SBC: Subtract with Carry opcodes
+            0xE9 => { // Immediate
+                let val = self.fetch_byte();
+                self.sbc(val);
+                true
+            }
+
+            0xE5 => {
+                let addr = self.addr_zero_page();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+
+            0xF5 => {
+                let addr = self.addr_zero_page_x();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+
+            0xED => {
+                let addr = self.addr_absolute();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+
+            0xFD => {
+                let addr = self.addr_absolute_x();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+
+            0xF9 => {
+                let addr = self.addr_absolute_y();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+
+            0xE1 => {
+                let addr = self.addr_indirect_x();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+            
+            0xF1 => {
+                let addr = self.addr_indirect_y();
+                let val = self.read(addr);
+                self.sbc(val);
+                true
+            }
+
             // Flag Toggles
             0x38 => { // Set Carry Flag
                 self.p |= Self::FLAG_CARRY;
@@ -174,7 +286,7 @@ impl Cpu {
                 self.set_zn(self.a);
                 true
             }
-            
+
             // Branching opcode
             0x90 => {
                 self.branch((self.p & Self::FLAG_CARRY) == 0);
@@ -592,6 +704,36 @@ impl Cpu {
         }
 
         self.set_zn(res);
+    }
+
+    // Subtract with Carry function
+    fn sbc(&mut self, data: u8) {
+        self.adc(!data);
+    }
+
+    // Adder function for adding accumulator
+    fn adc(&mut self, data: u8) {
+        let a = self.a as u16;
+        let b = data as u16;
+        let c = if (self.p & Self::FLAG_CARRY) != 0 { 1 } else { 0 };
+
+        let sum = a + b + c;
+        let result = sum as u8;
+
+        if sum > 0xFF {
+            self.p |= Self::FLAG_CARRY;
+        } else {
+            self.p &= !Self::FLAG_CARRY;
+        }
+
+        if (self.a ^ result) & (data ^ result) & 0x80 != 0 {
+            self.p |= Self::FLAG_OVERFLOW;
+        } else {
+            self.p &= !Self::FLAG_OVERFLOW;
+        }
+
+        self.a = result;
+        self.set_zn(self.a);
     }
 
     // Helper for all branching instructions
