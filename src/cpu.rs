@@ -45,7 +45,7 @@ impl Cpu {
     }
 
     // Fetches full 2-byte address, adds Y to it
-    fn addr_absolute_y (&mut self) -> u16 {
+    fn addr_absolute_y(&mut self) -> u16 {
         self.fetch_word().wrapping_add(self.y as u16)
     }
 
@@ -65,6 +65,7 @@ impl Cpu {
         let ptr = lo | (hi << 8);
         ptr.wrapping_add(self.y as u16)
     }
+
     // Fetch 16-bit word (little-endian) from instruction stream (This is the function)
     fn fetch_word(&mut self) -> u16 {
         let low = self.fetch_byte();
@@ -223,7 +224,7 @@ impl Cpu {
                 self.sbc(val);
                 true
             }
-            
+
             0xF1 => {
                 let addr = self.addr_indirect_y();
                 let val = self.read(addr);
@@ -284,6 +285,332 @@ impl Cpu {
                 let value = self.fetch_byte();
                 self.a ^= value;
                 self.set_zn(self.a);
+                true
+            }
+
+            // AND remaining modes
+            0x25 => {
+                let addr = self.addr_zero_page();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x35 => {
+                let addr = self.addr_zero_page_x();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x2D => {
+                let addr = self.addr_absolute();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x3D => {
+                let addr = self.addr_absolute_x();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x39 => {
+                let addr = self.addr_absolute_y();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x21 => {
+                let addr = self.addr_indirect_x();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x31 => {
+                let addr = self.addr_indirect_y();
+                self.a &= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+
+            // ORA remaining modes
+            0x05 => {
+                let addr = self.addr_zero_page();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x15 => {
+                let addr = self.addr_zero_page_x();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x0D => {
+                let addr = self.addr_absolute();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x1D => {
+                let addr = self.addr_absolute_x();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x19 => {
+                let addr = self.addr_absolute_y();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x01 => {
+                let addr = self.addr_indirect_x();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x11 => {
+                let addr = self.addr_indirect_y();
+                self.a |= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+
+            // EOR remaining modes
+            0x45 => {
+                let addr = self.addr_zero_page();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x55 => {
+                let addr = self.addr_zero_page_x();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x4D => {
+                let addr = self.addr_absolute();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x5D => {
+                let addr = self.addr_absolute_x();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x59 => {
+                let addr = self.addr_absolute_y();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x41 => {
+                let addr = self.addr_indirect_x();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+            0x51 => {
+                let addr = self.addr_indirect_y();
+                self.a ^= self.read(addr);
+                self.set_zn(self.a);
+                true
+            }
+
+            // BIT: test bits in memory against accumulator
+            0x24 => {
+                let addr = self.addr_zero_page();
+                let val = self.read(addr);
+                self.bit(val);
+                true
+            }
+            0x2C => {
+                let addr = self.addr_absolute();
+                let val = self.read(addr);
+                self.bit(val);
+                true
+            }
+
+            // ASL: Arithmetic Shift Left
+            0x0A => { // Accumulator
+                self.a = self.asl(self.a);
+                true
+            }
+            0x06 => {
+                let addr = self.addr_zero_page();
+                let r = self.asl(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x16 => {
+                let addr = self.addr_zero_page_x();
+                let r = self.asl(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x0E => {
+                let addr = self.addr_absolute();
+                let r = self.asl(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x1E => {
+                let addr = self.addr_absolute_x();
+                let r = self.asl(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+
+            // LSR: Logical Shift Right
+            0x4A => { // Accumulator
+                self.a = self.lsr(self.a);
+                true
+            }
+            0x46 => {
+                let addr = self.addr_zero_page();
+                let r = self.lsr(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x56 => {
+                let addr = self.addr_zero_page_x();
+                let r = self.lsr(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x4E => {
+                let addr = self.addr_absolute();
+                let r = self.lsr(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x5E => {
+                let addr = self.addr_absolute_x();
+                let r = self.lsr(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+
+            // ROL: Rotate Left through carry
+            0x2A => { // Accumulator
+                self.a = self.rol(self.a);
+                true
+            }
+            0x26 => {
+                let addr = self.addr_zero_page();
+                let r = self.rol(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x36 => {
+                let addr = self.addr_zero_page_x();
+                let r = self.rol(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x2E => {
+                let addr = self.addr_absolute();
+                let r = self.rol(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x3E => {
+                let addr = self.addr_absolute_x();
+                let r = self.rol(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+
+            // ROR: Rotate Right through carry
+            0x6A => { // Accumulator
+                self.a = self.ror(self.a);
+                true
+            }
+            0x66 => {
+                let addr = self.addr_zero_page();
+                let r = self.ror(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x76 => {
+                let addr = self.addr_zero_page_x();
+                let r = self.ror(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x6E => {
+                let addr = self.addr_absolute();
+                let r = self.ror(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+            0x7E => {
+                let addr = self.addr_absolute_x();
+                let r = self.ror(self.read(addr));
+                self.write(addr, r);
+                true
+            }
+
+            // INC: Increment memory
+            0xE6 => {
+                let addr = self.addr_zero_page();
+                let v = self.read(addr).wrapping_add(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+            0xF6 => {
+                let addr = self.addr_zero_page_x();
+                let v = self.read(addr).wrapping_add(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+            0xEE => {
+                let addr = self.addr_absolute();
+                let v = self.read(addr).wrapping_add(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+            0xFE => {
+                let addr = self.addr_absolute_x();
+                let v = self.read(addr).wrapping_add(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+
+            // DEC: Decrement memory
+            0xC6 => {
+                let addr = self.addr_zero_page();
+                let v = self.read(addr).wrapping_sub(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+            0xD6 => {
+                let addr = self.addr_zero_page_x();
+                let v = self.read(addr).wrapping_sub(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+            0xCE => {
+                let addr = self.addr_absolute();
+                let v = self.read(addr).wrapping_sub(1);
+                self.write(addr, v);
+                self.set_zn(v);
+                true
+            }
+            0xDE => {
+                let addr = self.addr_absolute_x();
+                let v = self.read(addr).wrapping_sub(1);
+                self.write(addr, v);
+                self.set_zn(v);
                 true
             }
 
@@ -524,25 +851,36 @@ impl Cpu {
             }
 
             // Load Y Register
-            0xA4 => { let addr = self.addr_zero_page();
+            0xA0 => {
+                // LDY immediate
+                let value = self.fetch_byte();
+                self.y = value;
+                self.set_zn(self.y);
+                true
+            }
+            0xA4 => {
+                let addr = self.addr_zero_page();
                 self.y = self.read(addr);
                 self.set_zn(self.y);
                 true
             }
 
-            0xB4 => { let addr = self.addr_zero_page_x();
+            0xB4 => {
+                let addr = self.addr_zero_page_x();
                 self.y = self.read(addr);
                 self.set_zn(self.y);
                 true
             }
 
-            0xAC => { let addr = self.addr_absolute();
+            0xAC => {
+                let addr = self.addr_absolute();
                 self.y = self.read(addr);
                 self.set_zn(self.y);
                 true
             }
 
-            0xBC => { let addr = self.addr_absolute_x();
+            0xBC => {
+                let addr = self.addr_absolute_x();
                 self.y = self.read(addr);
                 self.set_zn(self.y);
                 true
@@ -567,6 +905,7 @@ impl Cpu {
                 true
             }
 
+            // Load X Register
             0xA2 => {
                 // LDX immediate
                 let value = self.fetch_byte();
@@ -574,13 +913,48 @@ impl Cpu {
                 self.set_zn(self.x);
                 true
             }
-            0xA0 => {
-                // LDY immediate
-                let value = self.fetch_byte();
-                self.y = value;
-                self.set_zn(self.y);
+            0xA6 => {
+                let addr = self.addr_zero_page();
+                self.x = self.read(addr);
+                self.set_zn(self.x);
                 true
             }
+            0xB6 => {
+                let addr = self.addr_zero_page_y();
+                self.x = self.read(addr);
+                self.set_zn(self.x);
+                true
+            }
+            0xAE => {
+                let addr = self.addr_absolute();
+                self.x = self.read(addr);
+                self.set_zn(self.x);
+                true
+            }
+            0xBE => {
+                let addr = self.addr_absolute_y();
+                self.x = self.read(addr);
+                self.set_zn(self.x);
+                true
+            }
+
+            // Store X Register
+            0x86 => {
+                let addr = self.addr_zero_page();
+                self.write(addr, self.x);
+                true
+            }
+            0x96 => {
+                let addr = self.addr_zero_page_y();
+                self.write(addr, self.x);
+                true
+            }
+            0x8E => {
+                let addr = self.addr_absolute();
+                self.write(addr, self.x);
+                true
+            }
+
             0xAA => {
                 // TAX
                 self.x = self.a;
@@ -605,6 +979,18 @@ impl Cpu {
                 self.set_zn(self.a);
                 true
             }
+            0xBA => {
+                // TSX
+                self.x = self.sp;
+                self.set_zn(self.x);
+                true
+            }
+            0x9A => {
+                // TXS (no flags)
+                self.sp = self.x;
+                true
+            }
+
             0xE8 => {
                 // INX
                 self.x = self.x.wrapping_add(1);
@@ -629,6 +1015,45 @@ impl Cpu {
                 self.set_zn(self.y);
                 true
             }
+
+            // Stack opcodes
+            0x48 => {
+                // PHA
+                self.push_byte(self.a);
+                true
+            }
+            0x68 => {
+                // PLA
+                self.a = self.pop_byte();
+                self.set_zn(self.a);
+                true
+            }
+            0x08 => {
+                // PHP: B and unused bits always set when pushing
+                self.push_byte(self.p | Self::FLAG_BREAK | Self::FLAG_BREAK2);
+                true
+            }
+            0x28 => {
+                // PLP: B cleared, unused set when pulling
+                self.p = (self.pop_byte() & 0xCF) | 0x20;
+                true
+            }
+
+            // Jump opcodes
+            0x4C => {
+                // JMP absolute
+                self.pc = self.fetch_word();
+                true
+            }
+            0x6C => {
+                // JMP indirect, hardware page-wrap bug: high byte wraps within same page
+                let ptr = self.fetch_word();
+                let lo = self.read(ptr) as u16;
+                let hi = self.read((ptr & 0xFF00) | ((ptr + 1) & 0x00FF)) as u16;
+                self.pc = lo | (hi << 8);
+                true
+            }
+
             0x20 => {
                 // JSR abs
                 // Fetch target address
@@ -649,6 +1074,18 @@ impl Cpu {
                 self.pc = ret.wrapping_add(1);
                 true
             }
+            0x40 => {
+                // RTI: pull P then PC
+                self.p = (self.pop_byte() & 0xCF) | 0x20;
+                self.pc = self.pop_word();
+                true
+            }
+
+            0xEA => {
+                // NOP
+                true
+            }
+
             0x00 => {
                 // BRK stops execution loop
                 false
@@ -670,6 +1107,14 @@ impl Cpu {
         self.sp = 0xFD;
         self.p = 0x24;
         self.pc = self.read_word(0xFFFC);
+    }
+
+    // Trigger NMI: push PC and P, jump to vector at 0xFFFA
+    pub fn trigger_nmi(&mut self) {
+        self.push_word(self.pc);
+        self.push_byte((self.p | Self::FLAG_BREAK2) & !Self::FLAG_BREAK);
+        self.p |= Self::FLAG_INTERRUPT;
+        self.pc = self.read_word(0xFFFA);
     }
 
     // Memory read
@@ -697,9 +1142,9 @@ impl Cpu {
     fn compare(&mut self, reg: u8, val: u8) {
         let res = reg.wrapping_sub(val);
 
-        if reg >= val{
+        if reg >= val {
             self.p |= Self::FLAG_CARRY;
-        } else{
+        } else {
             self.p &= !Self::FLAG_CARRY;
         }
 
@@ -734,6 +1179,75 @@ impl Cpu {
 
         self.a = result;
         self.set_zn(self.a);
+    }
+
+    // Old bit 7 goes to carry, shift left, bit 0 becomes 0
+    fn asl(&mut self, val: u8) -> u8 {
+        if val & 0x80 != 0 {
+            self.p |= Self::FLAG_CARRY;
+        } else {
+            self.p &= !Self::FLAG_CARRY;
+        }
+        let result = val << 1;
+        self.set_zn(result);
+        result
+    }
+
+    // Old bit 0 goes to carry, shift right, bit 7 becomes 0
+    fn lsr(&mut self, val: u8) -> u8 {
+        if val & 0x01 != 0 {
+            self.p |= Self::FLAG_CARRY;
+        } else {
+            self.p &= !Self::FLAG_CARRY;
+        }
+        let result = val >> 1;
+        self.set_zn(result);
+        result
+    }
+
+    // Rotate left through carry
+    fn rol(&mut self, val: u8) -> u8 {
+        let old_carry = (self.p & Self::FLAG_CARRY) != 0;
+        if val & 0x80 != 0 {
+            self.p |= Self::FLAG_CARRY;
+        } else {
+            self.p &= !Self::FLAG_CARRY;
+        }
+        let result = (val << 1) | (old_carry as u8);
+        self.set_zn(result);
+        result
+    }
+
+    // Rotate right through carry
+    fn ror(&mut self, val: u8) -> u8 {
+        let old_carry = (self.p & Self::FLAG_CARRY) != 0;
+        if val & 0x01 != 0 {
+            self.p |= Self::FLAG_CARRY;
+        } else {
+            self.p &= !Self::FLAG_CARRY;
+        }
+        let result = (val >> 1) | ((old_carry as u8) << 7);
+        self.set_zn(result);
+        result
+    }
+
+    // BIT: Z = !(A & val), N = val bit 7, V = val bit 6
+    fn bit(&mut self, val: u8) {
+        if self.a & val == 0 {
+            self.p |= Self::FLAG_ZERO;
+        } else {
+            self.p &= !Self::FLAG_ZERO;
+        }
+        if val & 0x80 != 0 {
+            self.p |= Self::FLAG_NEG;
+        } else {
+            self.p &= !Self::FLAG_NEG;
+        }
+        if val & 0x40 != 0 {
+            self.p |= Self::FLAG_OVERFLOW;
+        } else {
+            self.p &= !Self::FLAG_OVERFLOW;
+        }
     }
 
     // Helper for all branching instructions

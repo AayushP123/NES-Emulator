@@ -1,4 +1,6 @@
 mod cpu;
+mod ppu;
+
 use cpu::Cpu;
 
 fn main() {
