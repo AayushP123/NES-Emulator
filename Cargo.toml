@@ -3,6 +3,19 @@ name    = "nes-emulator"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "nes_emulator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nes-emulator"
+path = "src/main.rs"
+
+[[bin]]
+name = "nestest"
+path = "src/bin/nestest.rs"
+
 [dependencies]
+# pixels 0.13 requires winit 0.28 and raw-window-handle 0.5 — do not upgrade independently
 pixels = "0.13"
-winit  = "0.29"
+winit  = "0.28"

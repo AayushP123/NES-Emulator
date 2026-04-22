@@ -1,19 +1,12 @@
-mod bus;
-mod cart;
-mod cpu;
-mod ppu;
-
-use bus::Bus;
-use cart::Cart;
-use cpu::Cpu;
-
+use nes_emulator::bus::Bus;
+use nes_emulator::cart::Cart;
+use nes_emulator::cpu::Cpu;
+use nes_emulator::ppu;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::dpi::LogicalSize;
+use winit::window::WindowBuilder;
 use pixels::{Pixels, SurfaceTexture};
-use winit::{
-    dpi::LogicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
-};
 
 fn main() {
     // Load ROM path from first command line arg: cargo run -- roms/game.nes
