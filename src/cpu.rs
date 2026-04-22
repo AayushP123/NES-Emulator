@@ -1,83 +1,82 @@
 // Entire CPU data structure state
+use crate::bus::Bus;
+
 pub struct Cpu {
-    pub a: u8,
-    pub x: u8,
-    pub y: u8,
+    pub a:  u8,
+    pub x:  u8,
+    pub y:  u8,
     pub pc: u16, // pointer to next instruction
-    pub p: u8,   // status flags
+    pub p:  u8,  // status flags
     pub sp: u8,  // stack pointer
-    pub mem_buffer: [u8; 65536],
 }
 
 impl Cpu {
     // Fetch byte at PC, then increment PC
-    // Immediate opcode
-    fn fetch_byte(&mut self) -> u8 {
-        let byte = self.read(self.pc);
+    fn fetch_byte(&mut self, bus: &mut Bus) -> u8 {
+        let byte = bus.read(self.pc);
         self.pc = self.pc.wrapping_add(1);
         byte
     }
 
-    // Addressing opcode
-    // Fetches 1 byte address
-    fn addr_zero_page(&mut self) -> u16 {
-        self.fetch_byte() as u16
+    // Fetch 16-bit word little-endian from instruction stream
+    fn fetch_word(&mut self, bus: &mut Bus) -> u16 {
+        let lo = self.fetch_byte(bus);
+        let hi = self.fetch_byte(bus);
+        (lo as u16) | ((hi as u16) << 8)
     }
 
-    // Byte + X, wraps around the zero page to make sure it doesn't go outta bounds
-    fn addr_zero_page_x(&mut self) -> u16 {
-        self.fetch_byte().wrapping_add(self.x) as u16
+    // Read 16-bit word little-endian from memory at addr
+    fn read_word(&self, bus: &mut Bus, addr: u16) -> u16 {
+        let lo = bus.read(addr) as u16;
+        let hi = bus.read(addr.wrapping_add(1)) as u16;
+        lo | (hi << 8)
     }
 
-    // Byte + Y, same idea, used by LDX or STX
-    fn addr_zero_page_y(&mut self) -> u16 {
-        self.fetch_byte().wrapping_add(self.y) as u16
+    // Addressing mode: fetch 1 byte address
+    fn addr_zero_page(&mut self, bus: &mut Bus) -> u16 {
+        self.fetch_byte(bus) as u16
     }
 
-    // Fetch the full 16-bit address (This is the actual 16-bit being pulled)
-    fn addr_absolute(&mut self) -> u16 {
-        self.fetch_word()
+    // Byte + X, wraps inside zero page to stay in bounds
+    fn addr_zero_page_x(&mut self, bus: &mut Bus) -> u16 {
+        self.fetch_byte(bus).wrapping_add(self.x) as u16
     }
 
-    // Fetches full 2-byte address, adds X to it.
-    fn addr_absolute_x(&mut self) -> u16 {
-        self.fetch_word().wrapping_add(self.x as u16)
+    // Byte + Y, used by LDX / STX
+    fn addr_zero_page_y(&mut self, bus: &mut Bus) -> u16 {
+        self.fetch_byte(bus).wrapping_add(self.y) as u16
+    }
+
+    // Fetch the full 16-bit address
+    fn addr_absolute(&mut self, bus: &mut Bus) -> u16 {
+        self.fetch_word(bus)
+    }
+
+    // Fetches full 2-byte address, adds X to it
+    fn addr_absolute_x(&mut self, bus: &mut Bus) -> u16 {
+        self.fetch_word(bus).wrapping_add(self.x as u16)
     }
 
     // Fetches full 2-byte address, adds Y to it
-    fn addr_absolute_y(&mut self) -> u16 {
-        self.fetch_word().wrapping_add(self.y as u16)
+    fn addr_absolute_y(&mut self, bus: &mut Bus) -> u16 {
+        self.fetch_word(bus).wrapping_add(self.y as u16)
     }
 
     // Add X to byte, lookup the pointer
-    fn addr_indirect_x(&mut self) -> u16 {
-        let base = self.fetch_byte().wrapping_add(self.x);
-        let lo = self.read(base as u16) as u16;
-        let hi = self.read(base.wrapping_add(1) as u16) as u16;
+    fn addr_indirect_x(&mut self, bus: &mut Bus) -> u16 {
+        let base = self.fetch_byte(bus).wrapping_add(self.x);
+        let lo   = bus.read(base as u16) as u16;
+        let hi   = bus.read(base.wrapping_add(1) as u16) as u16;
         lo | (hi << 8)
     }
 
     // Read byte, lookup the pointer, THEN add Y
-    fn addr_indirect_y(&mut self) -> u16 {
-        let base = self.fetch_byte();
-        let lo = self.read(base as u16) as u16;
-        let hi = self.read(base.wrapping_add(1) as u16) as u16;
-        let ptr = lo | (hi << 8);
+    fn addr_indirect_y(&mut self, bus: &mut Bus) -> u16 {
+        let base = self.fetch_byte(bus);
+        let lo   = bus.read(base as u16) as u16;
+        let hi   = bus.read(base.wrapping_add(1) as u16) as u16;
+        let ptr  = lo | (hi << 8);
         ptr.wrapping_add(self.y as u16)
-    }
-
-    // Fetch 16-bit word (little-endian) from instruction stream (This is the function)
-    fn fetch_word(&mut self) -> u16 {
-        let low = self.fetch_byte();
-        let high = self.fetch_byte();
-        (low as u16) | ((high as u16) << 8)
-    }
-
-    // Read 16-bit word (little-endian) from memory at addr
-    fn read_word(&self, addr: u16) -> u16 {
-        let lo = self.read(addr) as u16;
-        let hi = self.read(addr.wrapping_add(1)) as u16;
-        lo | (hi << 8)
     }
 
     // Compute stack address (page 0x01 + SP)
@@ -86,1191 +85,975 @@ impl Cpu {
     }
 
     // Push one byte onto stack
-    fn push_byte(&mut self, v: u8) {
+    fn push_byte(&mut self, bus: &mut Bus, v: u8) {
         let addr = self.stack_addr();
-        self.write(addr, v);
+        bus.write(addr, v);
         self.sp = self.sp.wrapping_sub(1);
     }
 
     // Pop one byte from stack
-    fn pop_byte(&mut self) -> u8 {
+    fn pop_byte(&mut self, bus: &mut Bus) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let addr = self.stack_addr();
-        self.read(addr)
+        bus.read(addr)
     }
 
     // Push 16-bit word onto stack (high byte first)
-    fn push_word(&mut self, v: u16) {
+    fn push_word(&mut self, bus: &mut Bus, v: u16) {
         let hi = (v >> 8) as u8;
         let lo = (v & 0x00FF) as u8;
-        self.push_byte(hi);
-        self.push_byte(lo);
+        self.push_byte(bus, hi);
+        self.push_byte(bus, lo);
     }
 
     // Pop 16-bit word from stack (low byte first)
-    fn pop_word(&mut self) -> u16 {
-        let lo = self.pop_byte() as u16;
-        let hi = self.pop_byte() as u16;
+    fn pop_word(&mut self, bus: &mut Bus) -> u16 {
+        let lo = self.pop_byte(bus) as u16;
+        let hi = self.pop_byte(bus) as u16;
         lo | (hi << 8)
     }
 
-    // Execute one instruction. Return false to stop (BRK).
-    pub fn step(&mut self) -> bool {
+    // Execute one instruction. Returns false to stop (BRK).
+    pub fn step(&mut self, bus: &mut Bus) -> bool {
         let opcode_pc = self.pc;
-        let opcode = self.fetch_byte();
+        let opcode    = self.fetch_byte(bus);
 
         match opcode {
             // ADC: Add with Carry opcodes
             0x69 => {
-                let val = self.fetch_byte();
+                let val = self.fetch_byte(bus);
                 self.adc(val);
                 true
             }
-
             0x65 => {
-                let addr = self.addr_zero_page();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
-
             0x75 => {
-                let addr = self.addr_zero_page_x();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
-
             0x6D => {
-                let addr = self.addr_absolute();
-                let val = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
-
             0x7D => {
-                let addr = self.addr_absolute_x();
-                let val = self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
-
             0x79 => {
-                let addr = self.addr_absolute_y();
-                let val = self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
-
             0x61 => {
-                let addr = self.addr_indirect_x();
-                let val = self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
-
             0x71 => {
-                let addr = self.addr_indirect_y();
-                let val = self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                let val  = bus.read(addr);
                 self.adc(val);
                 true
             }
 
             // SBC: Subtract with Carry opcodes
-            0xE9 => { // Immediate
-                let val = self.fetch_byte();
+            0xE9 => {
+                let val = self.fetch_byte(bus);
                 self.sbc(val);
                 true
             }
-
             0xE5 => {
-                let addr = self.addr_zero_page();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
-
             0xF5 => {
-                let addr = self.addr_zero_page_x();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
-
             0xED => {
-                let addr = self.addr_absolute();
-                let val = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
-
             0xFD => {
-                let addr = self.addr_absolute_x();
-                let val = self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
-
             0xF9 => {
-                let addr = self.addr_absolute_y();
-                let val = self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
-
             0xE1 => {
-                let addr = self.addr_indirect_x();
-                let val = self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
-
             0xF1 => {
-                let addr = self.addr_indirect_y();
-                let val = self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                let val  = bus.read(addr);
                 self.sbc(val);
                 true
             }
 
             // Flag Toggles
-            0x38 => { // Set Carry Flag
-                self.p |= Self::FLAG_CARRY;
-                true
-            }
+            0x38 => { self.p |= Self::FLAG_CARRY;      true } // Set Carry
+            0x18 => { self.p &= !Self::FLAG_CARRY;     true } // Clear Carry
+            0x78 => { self.p |= Self::FLAG_INTERRUPT;  true } // Set Interrupt Disable
+            0x58 => { self.p &= !Self::FLAG_INTERRUPT; true } // Clear Interrupt Disable
+            0xF8 => { self.p |= Self::FLAG_DECIMAL;    true } // Set Decimal
+            0xD8 => { self.p &= !Self::FLAG_DECIMAL;   true } // Clear Decimal
+            0xB8 => { self.p &= !Self::FLAG_OVERFLOW;  true } // Clear Overflow
 
-            0x18 => { // Clear Carry Flag
-                self.p &= !Self::FLAG_CARRY;
-                true
-            }
-
-            0x78 => { // Set Interrupt Disable
-                self.p |= Self::FLAG_INTERRUPT;
-                true
-            }
-
-            0x58 => { // Clear Interrupt Disable
-                self.p &= !Self::FLAG_INTERRUPT;
-                true
-            }
-
-            0xF8 => { // Set Decimal Flag
-                self.p |= Self::FLAG_DECIMAL;
-                true
-            }
-
-            0xD8 => { // Clear Decimal Flag
-                self.p &= !Self::FLAG_DECIMAL;
-                true
-            }
-
-            0xB8 => { // Clear Overflow Flag
-                self.p &= !Self::FLAG_OVERFLOW;
-                true
-            }
-
-            // Bitwise Logic (Immediate Mode)
-            0x29 => { // Logical AND
-                let value = self.fetch_byte();
-                self.a &= value;
+            // AND: Logical AND with accumulator
+            0x29 => {
+                let val = self.fetch_byte(bus);
+                self.a &= val;
                 self.set_zn(self.a);
                 true
             }
-            0x09 => { // Logical Inclusive OR
-                let value = self.fetch_byte();
-                self.a |= value;
-                self.set_zn(self.a);
-                true
-            }
-            0x49 => { // Exclusive OR (XOR)
-                let value = self.fetch_byte();
-                self.a ^= value;
-                self.set_zn(self.a);
-                true
-            }
-
-            // AND remaining modes
             0x25 => {
-                let addr = self.addr_zero_page();
-                self.a &= self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x35 => {
-                let addr = self.addr_zero_page_x();
-                self.a &= self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x2D => {
-                let addr = self.addr_absolute();
-                self.a &= self.read(addr);
+                let addr = self.addr_absolute(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x3D => {
-                let addr = self.addr_absolute_x();
-                self.a &= self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x39 => {
-                let addr = self.addr_absolute_y();
-                self.a &= self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x21 => {
-                let addr = self.addr_indirect_x();
-                self.a &= self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x31 => {
-                let addr = self.addr_indirect_y();
-                self.a &= self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                self.a &= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
 
-            // ORA remaining modes
+            // ORA: Logical Inclusive OR with accumulator
+            0x09 => {
+                let val = self.fetch_byte(bus);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
             0x05 => {
-                let addr = self.addr_zero_page();
-                self.a |= self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x15 => {
-                let addr = self.addr_zero_page_x();
-                self.a |= self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x0D => {
-                let addr = self.addr_absolute();
-                self.a |= self.read(addr);
+                let addr = self.addr_absolute(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x1D => {
-                let addr = self.addr_absolute_x();
-                self.a |= self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x19 => {
-                let addr = self.addr_absolute_y();
-                self.a |= self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x01 => {
-                let addr = self.addr_indirect_x();
-                self.a |= self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x11 => {
-                let addr = self.addr_indirect_y();
-                self.a |= self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                self.a |= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
 
-            // EOR remaining modes
+            // EOR: Exclusive OR with accumulator
+            0x49 => {
+                let val = self.fetch_byte(bus);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
             0x45 => {
-                let addr = self.addr_zero_page();
-                self.a ^= self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x55 => {
-                let addr = self.addr_zero_page_x();
-                self.a ^= self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x4D => {
-                let addr = self.addr_absolute();
-                self.a ^= self.read(addr);
+                let addr = self.addr_absolute(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x5D => {
-                let addr = self.addr_absolute_x();
-                self.a ^= self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x59 => {
-                let addr = self.addr_absolute_y();
-                self.a ^= self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x41 => {
-                let addr = self.addr_indirect_x();
-                self.a ^= self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
             0x51 => {
-                let addr = self.addr_indirect_y();
-                self.a ^= self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                self.a ^= bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
 
             // BIT: test bits in memory against accumulator
             0x24 => {
-                let addr = self.addr_zero_page();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
                 self.bit(val);
                 true
             }
             0x2C => {
-                let addr = self.addr_absolute();
-                let val = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
                 self.bit(val);
                 true
             }
 
             // ASL: Arithmetic Shift Left
-            0x0A => { // Accumulator
+            0x0A => {
+                // Accumulator mode
                 self.a = self.asl(self.a);
                 true
             }
             0x06 => {
-                let addr = self.addr_zero_page();
-                let r = self.asl(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page(bus);
+                let r    = self.asl(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x16 => {
-                let addr = self.addr_zero_page_x();
-                let r = self.asl(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page_x(bus);
+                let r    = self.asl(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x0E => {
-                let addr = self.addr_absolute();
-                let r = self.asl(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute(bus);
+                let r    = self.asl(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x1E => {
-                let addr = self.addr_absolute_x();
-                let r = self.asl(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute_x(bus);
+                let r    = self.asl(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
 
             // LSR: Logical Shift Right
-            0x4A => { // Accumulator
+            0x4A => {
+                // Accumulator mode
                 self.a = self.lsr(self.a);
                 true
             }
             0x46 => {
-                let addr = self.addr_zero_page();
-                let r = self.lsr(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page(bus);
+                let r    = self.lsr(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x56 => {
-                let addr = self.addr_zero_page_x();
-                let r = self.lsr(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page_x(bus);
+                let r    = self.lsr(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x4E => {
-                let addr = self.addr_absolute();
-                let r = self.lsr(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute(bus);
+                let r    = self.lsr(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x5E => {
-                let addr = self.addr_absolute_x();
-                let r = self.lsr(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute_x(bus);
+                let r    = self.lsr(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
 
             // ROL: Rotate Left through carry
-            0x2A => { // Accumulator
+            0x2A => {
+                // Accumulator mode
                 self.a = self.rol(self.a);
                 true
             }
             0x26 => {
-                let addr = self.addr_zero_page();
-                let r = self.rol(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page(bus);
+                let r    = self.rol(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x36 => {
-                let addr = self.addr_zero_page_x();
-                let r = self.rol(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page_x(bus);
+                let r    = self.rol(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x2E => {
-                let addr = self.addr_absolute();
-                let r = self.rol(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute(bus);
+                let r    = self.rol(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x3E => {
-                let addr = self.addr_absolute_x();
-                let r = self.rol(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute_x(bus);
+                let r    = self.rol(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
 
             // ROR: Rotate Right through carry
-            0x6A => { // Accumulator
+            0x6A => {
+                // Accumulator mode
                 self.a = self.ror(self.a);
                 true
             }
             0x66 => {
-                let addr = self.addr_zero_page();
-                let r = self.ror(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page(bus);
+                let r    = self.ror(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x76 => {
-                let addr = self.addr_zero_page_x();
-                let r = self.ror(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_zero_page_x(bus);
+                let r    = self.ror(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x6E => {
-                let addr = self.addr_absolute();
-                let r = self.ror(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute(bus);
+                let r    = self.ror(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
             0x7E => {
-                let addr = self.addr_absolute_x();
-                let r = self.ror(self.read(addr));
-                self.write(addr, r);
+                let addr = self.addr_absolute_x(bus);
+                let r    = self.ror(bus.read(addr));
+                bus.write(addr, r);
                 true
             }
 
             // INC: Increment memory
             0xE6 => {
-                let addr = self.addr_zero_page();
-                let v = self.read(addr).wrapping_add(1);
-                self.write(addr, v);
+                let addr = self.addr_zero_page(bus);
+                let v    = bus.read(addr).wrapping_add(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
             0xF6 => {
-                let addr = self.addr_zero_page_x();
-                let v = self.read(addr).wrapping_add(1);
-                self.write(addr, v);
+                let addr = self.addr_zero_page_x(bus);
+                let v    = bus.read(addr).wrapping_add(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
             0xEE => {
-                let addr = self.addr_absolute();
-                let v = self.read(addr).wrapping_add(1);
-                self.write(addr, v);
+                let addr = self.addr_absolute(bus);
+                let v    = bus.read(addr).wrapping_add(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
             0xFE => {
-                let addr = self.addr_absolute_x();
-                let v = self.read(addr).wrapping_add(1);
-                self.write(addr, v);
+                let addr = self.addr_absolute_x(bus);
+                let v    = bus.read(addr).wrapping_add(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
 
             // DEC: Decrement memory
             0xC6 => {
-                let addr = self.addr_zero_page();
-                let v = self.read(addr).wrapping_sub(1);
-                self.write(addr, v);
+                let addr = self.addr_zero_page(bus);
+                let v    = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
             0xD6 => {
-                let addr = self.addr_zero_page_x();
-                let v = self.read(addr).wrapping_sub(1);
-                self.write(addr, v);
+                let addr = self.addr_zero_page_x(bus);
+                let v    = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
             0xCE => {
-                let addr = self.addr_absolute();
-                let v = self.read(addr).wrapping_sub(1);
-                self.write(addr, v);
+                let addr = self.addr_absolute(bus);
+                let v    = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
             0xDE => {
-                let addr = self.addr_absolute_x();
-                let v = self.read(addr).wrapping_sub(1);
-                self.write(addr, v);
+                let addr = self.addr_absolute_x(bus);
+                let v    = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, v);
                 self.set_zn(v);
                 true
             }
 
-            // Branching opcode
-            0x90 => {
-                self.branch((self.p & Self::FLAG_CARRY) == 0);
-                true
-            }
+            // Branching opcodes
+            0x90 => { self.branch(bus, (self.p & Self::FLAG_CARRY)    == 0); true } // BCC
+            0xB0 => { self.branch(bus, (self.p & Self::FLAG_CARRY)    != 0); true } // BCS
+            0xD0 => { self.branch(bus, (self.p & Self::FLAG_ZERO)     == 0); true } // BNE
+            0xF0 => { self.branch(bus, (self.p & Self::FLAG_ZERO)     != 0); true } // BEQ
+            0x10 => { self.branch(bus, (self.p & Self::FLAG_NEG)      == 0); true } // BPL
+            0x30 => { self.branch(bus, (self.p & Self::FLAG_NEG)      != 0); true } // BMI
+            0x50 => { self.branch(bus, (self.p & Self::FLAG_OVERFLOW) == 0); true } // BVC
+            0x70 => { self.branch(bus, (self.p & Self::FLAG_OVERFLOW) != 0); true } // BVS
 
-            0xB0 => {
-                self.branch((self.p & Self::FLAG_CARRY) != 0);
-                true
-            }
-
-            0xD0 => {
-                self.branch((self.p & Self::FLAG_ZERO) == 0);
-                true
-            }
-            0xF0 => {
-                self.branch((self.p & Self::FLAG_ZERO) != 0);
-                true
-            }
-
-            0x10 => {
-                self.branch((self.p & Self::FLAG_NEG) == 0);
-                true
-            }
-            0x30 => {
-                self.branch((self.p & Self::FLAG_NEG) != 0);
-                true
-            }
-
-            0x50 => {
-                self.branch((self.p & Self::FLAG_OVERFLOW) == 0);
-                true
-            }
-
-            0x70 => {
-                self.branch((self.p & Self::FLAG_OVERFLOW) != 0);
-                true
-            }
-
-            // Compare Accumulator opcodes
+            // CMP: Compare Accumulator
             0xC9 => {
-                let val = self.fetch_byte();
+                let val = self.fetch_byte(bus);
                 self.compare(self.a, val);
                 true
             }
-
             0xC5 => {
-                let addr = self.addr_zero_page();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
-
             0xD5 => {
-                let addr = self.addr_zero_page_x();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
-
             0xCD => {
-                let addr = self.addr_absolute();
-                let val = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
-
             0xDD => {
-                let addr = self.addr_absolute_x();
-                let val = self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
-
             0xD9 => {
-                let addr = self.addr_absolute_y();
-                let val = self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
-
             0xC1 => {
-                let addr = self.addr_indirect_x();
-                let val = self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
-
             0xD1 => {
-                let addr = self.addr_indirect_y();
-                let val = self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                let val  = bus.read(addr);
                 self.compare(self.a, val);
                 true
             }
 
-            // Compare X Register
+            // CPX: Compare X Register
             0xE0 => {
-                let val = self.fetch_byte();
+                let val = self.fetch_byte(bus);
                 self.compare(self.x, val);
                 true
             }
-
             0xE4 => {
-                let addr = self.addr_zero_page();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
                 self.compare(self.x, val);
                 true
             }
-
             0xEC => {
-                let addr = self.addr_absolute();
-                let val = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
                 self.compare(self.x, val);
                 true
             }
 
-            // Compare Y Register
+            // CPY: Compare Y Register
             0xC0 => {
-                let val = self.fetch_byte();
+                let val = self.fetch_byte(bus);
                 self.compare(self.y, val);
                 true
             }
-
             0xC4 => {
-                let addr = self.addr_zero_page();
-                let val = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
                 self.compare(self.y, val);
                 true
             }
-
             0xCC => {
-                let addr = self.addr_absolute();
-                let val = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
                 self.compare(self.y, val);
                 true
             }
 
-            // Load Accumulator opcodes
-            0xA9 => { // Immediate
-                let value = self.fetch_byte();
-                self.a = value;
+            // LDA: Load Accumulator
+            0xA9 => {
+                self.a = self.fetch_byte(bus);
                 self.set_zn(self.a);
                 true
             }
             0xA5 => {
-                let addr = self.addr_zero_page();
-                self.a = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
-
             0xB5 => {
-                let addr = self.addr_zero_page_x();
-                self.a = self.read(addr);
+                let addr = self.addr_zero_page_x(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
-
             0xAD => {
-                let addr = self.addr_absolute();
-                self.a = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
-
             0xBD => {
-                let addr = self.addr_absolute_x();
-                self.a = self.read(addr);
+                let addr = self.addr_absolute_x(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
-
             0xB9 => {
-                let addr = self.addr_absolute_y();
-                self.a = self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
-
             0xA1 => {
-                let addr = self.addr_indirect_x();
-                self.a = self.read(addr);
+                let addr = self.addr_indirect_x(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
-
             0xB1 => {
-                let addr = self.addr_indirect_y();
-                self.a = self.read(addr);
+                let addr = self.addr_indirect_y(bus);
+                self.a   = bus.read(addr);
                 self.set_zn(self.a);
                 true
             }
 
-            // Store accumulator
+            // STA: Store Accumulator
             0x85 => {
-                let addr = self.addr_zero_page();
-                self.write(addr, self.a);
+                let addr = self.addr_zero_page(bus);
+                bus.write(addr, self.a);
                 true
             }
-
             0x95 => {
-                let addr = self.addr_zero_page_x();
-                self.write(addr, self.a);
+                let addr = self.addr_zero_page_x(bus);
+                bus.write(addr, self.a);
                 true
             }
-
             0x8D => {
-                let addr = self.addr_absolute();
-                self.write(addr, self.a);
+                let addr = self.addr_absolute(bus);
+                bus.write(addr, self.a);
                 true
             }
-
             0x9D => {
-                let addr = self.addr_absolute_x();
-                self.write(addr, self.a);
+                let addr = self.addr_absolute_x(bus);
+                bus.write(addr, self.a);
                 true
             }
-
             0x99 => {
-                let addr = self.addr_absolute_y();
-                self.write(addr, self.a);
+                let addr = self.addr_absolute_y(bus);
+                bus.write(addr, self.a);
                 true
             }
-
             0x81 => {
-                let addr = self.addr_indirect_x();
-                self.write(addr, self.a);
+                let addr = self.addr_indirect_x(bus);
+                bus.write(addr, self.a);
                 true
             }
-
             0x91 => {
-                let addr = self.addr_indirect_y();
-                self.write(addr, self.a);
+                let addr = self.addr_indirect_y(bus);
+                bus.write(addr, self.a);
                 true
             }
 
-            // Load Y Register
-            0xA0 => {
-                // LDY immediate
-                let value = self.fetch_byte();
-                self.y = value;
-                self.set_zn(self.y);
-                true
-            }
-            0xA4 => {
-                let addr = self.addr_zero_page();
-                self.y = self.read(addr);
-                self.set_zn(self.y);
-                true
-            }
-
-            0xB4 => {
-                let addr = self.addr_zero_page_x();
-                self.y = self.read(addr);
-                self.set_zn(self.y);
-                true
-            }
-
-            0xAC => {
-                let addr = self.addr_absolute();
-                self.y = self.read(addr);
-                self.set_zn(self.y);
-                true
-            }
-
-            0xBC => {
-                let addr = self.addr_absolute_x();
-                self.y = self.read(addr);
-                self.set_zn(self.y);
-                true
-            }
-
-            // Store Y Register
-            0x84 => {
-                let addr = self.addr_zero_page();
-                self.write(addr, self.y);
-                true
-            }
-
-            0x94 => {
-                let addr = self.addr_zero_page_x();
-                self.write(addr, self.y);
-                true
-            }
-
-            0x8C => {
-                let addr = self.addr_absolute();
-                self.write(addr, self.y);
-                true
-            }
-
-            // Load X Register
+            // LDX: Load X Register
             0xA2 => {
-                // LDX immediate
-                let value = self.fetch_byte();
-                self.x = value;
+                self.x = self.fetch_byte(bus);
                 self.set_zn(self.x);
                 true
             }
             0xA6 => {
-                let addr = self.addr_zero_page();
-                self.x = self.read(addr);
+                let addr = self.addr_zero_page(bus);
+                self.x   = bus.read(addr);
                 self.set_zn(self.x);
                 true
             }
             0xB6 => {
-                let addr = self.addr_zero_page_y();
-                self.x = self.read(addr);
+                let addr = self.addr_zero_page_y(bus);
+                self.x   = bus.read(addr);
                 self.set_zn(self.x);
                 true
             }
             0xAE => {
-                let addr = self.addr_absolute();
-                self.x = self.read(addr);
+                let addr = self.addr_absolute(bus);
+                self.x   = bus.read(addr);
                 self.set_zn(self.x);
                 true
             }
             0xBE => {
-                let addr = self.addr_absolute_y();
-                self.x = self.read(addr);
+                let addr = self.addr_absolute_y(bus);
+                self.x   = bus.read(addr);
                 self.set_zn(self.x);
                 true
             }
 
-            // Store X Register
+            // STX: Store X Register
             0x86 => {
-                let addr = self.addr_zero_page();
-                self.write(addr, self.x);
+                let addr = self.addr_zero_page(bus);
+                bus.write(addr, self.x);
                 true
             }
             0x96 => {
-                let addr = self.addr_zero_page_y();
-                self.write(addr, self.x);
+                let addr = self.addr_zero_page_y(bus);
+                bus.write(addr, self.x);
                 true
             }
             0x8E => {
-                let addr = self.addr_absolute();
-                self.write(addr, self.x);
+                let addr = self.addr_absolute(bus);
+                bus.write(addr, self.x);
                 true
             }
 
-            0xAA => {
-                // TAX
-                self.x = self.a;
-                self.set_zn(self.x);
-                true
-            }
-            0x8A => {
-                // TXA
-                self.a = self.x;
-                self.set_zn(self.a);
-                true
-            }
-            0xA8 => {
-                // TAY
-                self.y = self.a;
+            // LDY: Load Y Register
+            0xA0 => {
+                self.y = self.fetch_byte(bus);
                 self.set_zn(self.y);
                 true
             }
-            0x98 => {
-                // TYA
-                self.a = self.y;
-                self.set_zn(self.a);
+            0xA4 => {
+                let addr = self.addr_zero_page(bus);
+                self.y   = bus.read(addr);
+                self.set_zn(self.y);
                 true
             }
-            0xBA => {
-                // TSX
-                self.x = self.sp;
-                self.set_zn(self.x);
+            0xB4 => {
+                let addr = self.addr_zero_page_x(bus);
+                self.y   = bus.read(addr);
+                self.set_zn(self.y);
                 true
             }
-            0x9A => {
-                // TXS (no flags)
-                self.sp = self.x;
+            0xAC => {
+                let addr = self.addr_absolute(bus);
+                self.y   = bus.read(addr);
+                self.set_zn(self.y);
+                true
+            }
+            0xBC => {
+                let addr = self.addr_absolute_x(bus);
+                self.y   = bus.read(addr);
+                self.set_zn(self.y);
                 true
             }
 
-            0xE8 => {
-                // INX
-                self.x = self.x.wrapping_add(1);
-                self.set_zn(self.x);
+            // STY: Store Y Register
+            0x84 => {
+                let addr = self.addr_zero_page(bus);
+                bus.write(addr, self.y);
                 true
             }
-            0xCA => {
-                // DEX
-                self.x = self.x.wrapping_sub(1);
-                self.set_zn(self.x);
+            0x94 => {
+                let addr = self.addr_zero_page_x(bus);
+                bus.write(addr, self.y);
                 true
             }
-            0xC8 => {
-                // INY
-                self.y = self.y.wrapping_add(1);
-                self.set_zn(self.y);
+            0x8C => {
+                let addr = self.addr_absolute(bus);
+                bus.write(addr, self.y);
                 true
             }
-            0x88 => {
-                // DEY
-                self.y = self.y.wrapping_sub(1);
-                self.set_zn(self.y);
-                true
-            }
+
+            // Register transfers
+            0xAA => { self.x = self.a;  self.set_zn(self.x); true } // TAX
+            0x8A => { self.a = self.x;  self.set_zn(self.a); true } // TXA
+            0xA8 => { self.y = self.a;  self.set_zn(self.y); true } // TAY
+            0x98 => { self.a = self.y;  self.set_zn(self.a); true } // TYA
+            0xBA => { self.x = self.sp; self.set_zn(self.x); true } // TSX
+            0x9A => { self.sp = self.x;                      true } // TXS (no flags)
+
+            // Register increments / decrements
+            0xE8 => { self.x = self.x.wrapping_add(1); self.set_zn(self.x); true } // INX
+            0xCA => { self.x = self.x.wrapping_sub(1); self.set_zn(self.x); true } // DEX
+            0xC8 => { self.y = self.y.wrapping_add(1); self.set_zn(self.y); true } // INY
+            0x88 => { self.y = self.y.wrapping_sub(1); self.set_zn(self.y); true } // DEY
 
             // Stack opcodes
             0x48 => {
-                // PHA
-                self.push_byte(self.a);
+                // PHA: push accumulator
+                self.push_byte(bus, self.a);
                 true
             }
             0x68 => {
-                // PLA
-                self.a = self.pop_byte();
+                // PLA: pull accumulator
+                self.a = self.pop_byte(bus);
                 self.set_zn(self.a);
                 true
             }
             0x08 => {
                 // PHP: B and unused bits always set when pushing
-                self.push_byte(self.p | Self::FLAG_BREAK | Self::FLAG_BREAK2);
+                self.push_byte(bus, self.p | Self::FLAG_BREAK | Self::FLAG_BREAK2);
                 true
             }
             0x28 => {
                 // PLP: B cleared, unused set when pulling
-                self.p = (self.pop_byte() & 0xCF) | 0x20;
+                self.p = (self.pop_byte(bus) & 0xCF) | 0x20;
                 true
             }
 
             // Jump opcodes
             0x4C => {
                 // JMP absolute
-                self.pc = self.fetch_word();
+                self.pc = self.fetch_word(bus);
                 true
             }
             0x6C => {
-                // JMP indirect, hardware page-wrap bug: high byte wraps within same page
-                let ptr = self.fetch_word();
-                let lo = self.read(ptr) as u16;
-                let hi = self.read((ptr & 0xFF00) | ((ptr + 1) & 0x00FF)) as u16;
+                // JMP indirect: hardware page-wrap bug, high byte wraps within same page
+                let ptr = self.fetch_word(bus);
+                let lo  = bus.read(ptr) as u16;
+                let hi  = bus.read((ptr & 0xFF00) | ((ptr + 1) & 0x00FF)) as u16;
                 self.pc = lo | (hi << 8);
                 true
             }
-
             0x20 => {
-                // JSR abs
-                // Fetch target address
-                let target = self.fetch_word();
-
-                // Push return address (PC - 1)
-                let ret = self.pc.wrapping_sub(1);
-                self.push_word(ret);
-
-                // Jump to target
+                // JSR: push return address (PC - 1) then jump
+                let target = self.fetch_word(bus);
+                let ret    = self.pc.wrapping_sub(1);
+                self.push_word(bus, ret);
                 self.pc = target;
                 true
             }
             0x60 => {
-                // RTS
-                // Pull return address and add 1
-                let ret = self.pop_word();
+                // RTS: pull return address and add 1
+                let ret = self.pop_word(bus);
                 self.pc = ret.wrapping_add(1);
                 true
             }
             0x40 => {
                 // RTI: pull P then PC
-                self.p = (self.pop_byte() & 0xCF) | 0x20;
-                self.pc = self.pop_word();
+                self.p  = (self.pop_byte(bus) & 0xCF) | 0x20;
+                self.pc = self.pop_word(bus);
                 true
             }
 
-            0xEA => {
-                // NOP
-                true
-            }
+            0xEA => true, // NOP
 
-            0x00 => {
-                // BRK stops execution loop
-                false
-            }
+            0x00 => false, // BRK: stop execution loop
+
             _ => {
-                panic!(
-                    "Unknown opcode {:02X} at PC {:04X}",
-                    opcode, opcode_pc
-                )
+                panic!("Unknown opcode {:02X} at PC {:04X}", opcode, opcode_pc)
             }
         }
     }
 
-    // Reset to vector at 0xFFFC/0xFFFD
-    pub fn reset(&mut self) {
-        self.a = 0;
-        self.x = 0;
-        self.y = 0;
+    // Reset: load PC from reset vector at $FFFC/$FFFD
+    pub fn reset(&mut self, bus: &mut Bus) {
+        self.a  = 0;
+        self.x  = 0;
+        self.y  = 0;
         self.sp = 0xFD;
-        self.p = 0x24;
-        self.pc = self.read_word(0xFFFC);
+        self.p  = 0x24;
+        self.pc = self.read_word(bus, 0xFFFC);
     }
 
-    // Trigger NMI: push PC and P, jump to vector at 0xFFFA
-    pub fn trigger_nmi(&mut self) {
-        self.push_word(self.pc);
-        self.push_byte((self.p | Self::FLAG_BREAK2) & !Self::FLAG_BREAK);
+    // Trigger NMI: push PC and P, jump to vector at $FFFA/$FFFB
+    pub fn trigger_nmi(&mut self, bus: &mut Bus) {
+        self.push_word(bus, self.pc);
+        self.push_byte(bus, (self.p | Self::FLAG_BREAK2) & !Self::FLAG_BREAK);
         self.p |= Self::FLAG_INTERRUPT;
-        self.pc = self.read_word(0xFFFA);
+        self.pc = self.read_word(bus, 0xFFFA);
     }
 
-    // Memory read
-    fn read(&self, addr: u16) -> u8 {
-        self.mem_buffer[addr as usize]
-    }
-
-    // Memory write
-    pub fn write(&mut self, addr: u16, data: u8) {
-        self.mem_buffer[addr as usize] = data;
-    }
-
-    // Addressing opcodes
-
-    const FLAG_CARRY: u8     = 0b0000_0001;
-    const FLAG_ZERO: u8      = 0b0000_0010;
+    // Status flag bit positions
+    const FLAG_CARRY:     u8 = 0b0000_0001;
+    const FLAG_ZERO:      u8 = 0b0000_0010;
     const FLAG_INTERRUPT: u8 = 0b0000_0100;
-    const FLAG_DECIMAL: u8   = 0b0000_1000;
-    const FLAG_BREAK: u8     = 0b0001_0000;
-    const FLAG_BREAK2: u8    = 0b0010_0000;
-    const FLAG_OVERFLOW: u8  = 0b0100_0000;
-    const FLAG_NEG: u8       = 0b1000_0000;
+    const FLAG_DECIMAL:   u8 = 0b0000_1000;
+    const FLAG_BREAK:     u8 = 0b0001_0000;
+    const FLAG_BREAK2:    u8 = 0b0010_0000;
+    const FLAG_OVERFLOW:  u8 = 0b0100_0000;
+    const FLAG_NEG:       u8 = 0b1000_0000;
 
-    // Compare function for funcs: CMP, CPX, CPY
+    // Compare function for CMP, CPX, CPY
     fn compare(&mut self, reg: u8, val: u8) {
         let res = reg.wrapping_sub(val);
-
-        if reg >= val {
-            self.p |= Self::FLAG_CARRY;
-        } else {
-            self.p &= !Self::FLAG_CARRY;
-        }
-
+        if reg >= val { self.p |= Self::FLAG_CARRY; }
+        else          { self.p &= !Self::FLAG_CARRY; }
         self.set_zn(res);
     }
 
-    // Subtract with Carry function
+    // Subtract with Carry: invert operand then add
     fn sbc(&mut self, data: u8) {
         self.adc(!data);
     }
 
-    // Adder function for adding accumulator
+    // Add with Carry
     fn adc(&mut self, data: u8) {
-        let a = self.a as u16;
-        let b = data as u16;
-        let c = if (self.p & Self::FLAG_CARRY) != 0 { 1 } else { 0 };
-
+        let a   = self.a as u16;
+        let b   = data as u16;
+        let c   = if (self.p & Self::FLAG_CARRY) != 0 { 1 } else { 0 };
         let sum = a + b + c;
-        let result = sum as u8;
+        let res = sum as u8;
 
-        if sum > 0xFF {
-            self.p |= Self::FLAG_CARRY;
-        } else {
-            self.p &= !Self::FLAG_CARRY;
-        }
+        if sum > 0xFF                              { self.p |= Self::FLAG_CARRY; }
+        else                                       { self.p &= !Self::FLAG_CARRY; }
+        if (self.a ^ res) & (data ^ res) & 0x80 != 0 { self.p |= Self::FLAG_OVERFLOW; }
+        else                                       { self.p &= !Self::FLAG_OVERFLOW; }
 
-        if (self.a ^ result) & (data ^ result) & 0x80 != 0 {
-            self.p |= Self::FLAG_OVERFLOW;
-        } else {
-            self.p &= !Self::FLAG_OVERFLOW;
-        }
-
-        self.a = result;
+        self.a = res;
         self.set_zn(self.a);
     }
 
     // Old bit 7 goes to carry, shift left, bit 0 becomes 0
     fn asl(&mut self, val: u8) -> u8 {
-        if val & 0x80 != 0 {
-            self.p |= Self::FLAG_CARRY;
-        } else {
-            self.p &= !Self::FLAG_CARRY;
-        }
-        let result = val << 1;
-        self.set_zn(result);
-        result
+        if val & 0x80 != 0 { self.p |= Self::FLAG_CARRY; }
+        else               { self.p &= !Self::FLAG_CARRY; }
+        let res = val << 1;
+        self.set_zn(res);
+        res
     }
 
     // Old bit 0 goes to carry, shift right, bit 7 becomes 0
     fn lsr(&mut self, val: u8) -> u8 {
-        if val & 0x01 != 0 {
-            self.p |= Self::FLAG_CARRY;
-        } else {
-            self.p &= !Self::FLAG_CARRY;
-        }
-        let result = val >> 1;
-        self.set_zn(result);
-        result
+        if val & 0x01 != 0 { self.p |= Self::FLAG_CARRY; }
+        else               { self.p &= !Self::FLAG_CARRY; }
+        let res = val >> 1;
+        self.set_zn(res);
+        res
     }
 
     // Rotate left through carry
     fn rol(&mut self, val: u8) -> u8 {
-        let old_carry = (self.p & Self::FLAG_CARRY) != 0;
-        if val & 0x80 != 0 {
-            self.p |= Self::FLAG_CARRY;
-        } else {
-            self.p &= !Self::FLAG_CARRY;
-        }
-        let result = (val << 1) | (old_carry as u8);
-        self.set_zn(result);
-        result
+        let old_c = (self.p & Self::FLAG_CARRY) != 0;
+        if val & 0x80 != 0 { self.p |= Self::FLAG_CARRY; }
+        else               { self.p &= !Self::FLAG_CARRY; }
+        let res = (val << 1) | (old_c as u8);
+        self.set_zn(res);
+        res
     }
 
     // Rotate right through carry
     fn ror(&mut self, val: u8) -> u8 {
-        let old_carry = (self.p & Self::FLAG_CARRY) != 0;
-        if val & 0x01 != 0 {
-            self.p |= Self::FLAG_CARRY;
-        } else {
-            self.p &= !Self::FLAG_CARRY;
-        }
-        let result = (val >> 1) | ((old_carry as u8) << 7);
-        self.set_zn(result);
-        result
+        let old_c = (self.p & Self::FLAG_CARRY) != 0;
+        if val & 0x01 != 0 { self.p |= Self::FLAG_CARRY; }
+        else               { self.p &= !Self::FLAG_CARRY; }
+        let res = (val >> 1) | ((old_c as u8) << 7);
+        self.set_zn(res);
+        res
     }
 
     // BIT: Z = !(A & val), N = val bit 7, V = val bit 6
     fn bit(&mut self, val: u8) {
-        if self.a & val == 0 {
-            self.p |= Self::FLAG_ZERO;
-        } else {
-            self.p &= !Self::FLAG_ZERO;
-        }
-        if val & 0x80 != 0 {
-            self.p |= Self::FLAG_NEG;
-        } else {
-            self.p &= !Self::FLAG_NEG;
-        }
-        if val & 0x40 != 0 {
-            self.p |= Self::FLAG_OVERFLOW;
-        } else {
-            self.p &= !Self::FLAG_OVERFLOW;
-        }
+        if self.a & val == 0 { self.p |= Self::FLAG_ZERO; }
+        else                 { self.p &= !Self::FLAG_ZERO; }
+        if val & 0x80 != 0   { self.p |= Self::FLAG_NEG; }
+        else                 { self.p &= !Self::FLAG_NEG; }
+        if val & 0x40 != 0   { self.p |= Self::FLAG_OVERFLOW; }
+        else                 { self.p &= !Self::FLAG_OVERFLOW; }
     }
 
     // Helper for all branching instructions
-    fn branch(&mut self, condition: bool) {
-        let offset = self.fetch_byte() as i8;
-
+    fn branch(&mut self, bus: &mut Bus, condition: bool) {
+        let offset = self.fetch_byte(bus) as i8;
         if condition {
             self.pc = self.pc.wrapping_add_signed(offset as i16);
         }
     }
 
-    // Update Z and N based on value
+    // Update Z and N flags based on value
     fn set_zn(&mut self, val: u8) {
-        if val == 0 {
-            self.p |= Self::FLAG_ZERO;
-        } else {
-            self.p &= !Self::FLAG_ZERO;
-        }
-
-        if (val & 0x80) != 0 {
-            self.p |= Self::FLAG_NEG;
-        } else {
-            self.p &= !Self::FLAG_NEG;
-        }
+        if val == 0          { self.p |= Self::FLAG_ZERO; }
+        else                 { self.p &= !Self::FLAG_ZERO; }
+        if (val & 0x80) != 0 { self.p |= Self::FLAG_NEG; }
+        else                 { self.p &= !Self::FLAG_NEG; }
     }
 }
