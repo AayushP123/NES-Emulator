@@ -924,13 +924,429 @@ impl Cpu {
                 self.pc = self.pop_word(bus);
                 true
             }
-
+            // LAX: Load A and X from memory simultaneously (unofficial)
+            0xA3 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = bus.read(addr);
+                self.a   = val;
+                self.x   = val;
+                self.set_zn(val);
+                true
+            }
+            0xA7 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr);
+                self.a   = val;
+                self.x   = val;
+                self.set_zn(val);
+                true
+            }
+            0xAF => {
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr);
+                self.a   = val;
+                self.x   = val;
+                self.set_zn(val);
+                true
+            }
+            0xB3 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = bus.read(addr);
+                self.a   = val;
+                self.x   = val;
+                self.set_zn(val);
+                true
+            }
+            0xB7 => {
+                let addr = self.addr_zero_page_y(bus);
+                let val  = bus.read(addr);
+                self.a   = val;
+                self.x   = val;
+                self.set_zn(val);
+                true
+            }
+            0xBF => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = bus.read(addr);
+                self.a   = val;
+                self.x   = val;
+                self.set_zn(val);
+                true
+            }
+            // SAX: Store A AND X into memory (unofficial)
+            0x83 => {
+                let addr = self.addr_indirect_x(bus);
+                bus.write(addr, self.a & self.x);
+                true
+            }
+            0x87 => {
+                let addr = self.addr_zero_page(bus);
+                bus.write(addr, self.a & self.x);
+                true
+            }
+            0x8F => {
+                let addr = self.addr_absolute(bus);
+                bus.write(addr, self.a & self.x);
+                true
+            }
+            0x97 => {
+                let addr = self.addr_zero_page_y(bus);
+                bus.write(addr, self.a & self.x);
+                true
+            }
+            // Unofficial SBC immediate (identical to 0xE9)
+            0xEB => {
+                let val = self.fetch_byte(bus);
+                self.sbc(val);
+                true
+            }
+            // DCP: DEC memory then CMP with A (unofficial)
+            0xC3 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            0xC7 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            0xCF => {
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            0xD3 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            0xD7 => {
+                let addr = self.addr_zero_page_x(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            0xDB => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            0xDF => {
+                let addr = self.addr_absolute_x(bus);
+                let val  = bus.read(addr).wrapping_sub(1);
+                bus.write(addr, val);
+                self.compare(self.a, val);
+                true
+            }
+            // ISB: INC memory then SBC with A (unofficial)
+            0xE3 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            0xE7 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            0xEF => {
+                let addr = self.addr_absolute(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            0xF3 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            0xF7 => {
+                let addr = self.addr_zero_page_x(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            0xFB => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            0xFF => {
+                let addr = self.addr_absolute_x(bus);
+                let val  = bus.read(addr).wrapping_add(1);
+                bus.write(addr, val);
+                self.sbc(val);
+                true
+            }
+            // SLO: ASL memory then ORA with A (unofficial)
+            0x03 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x07 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x0F => {
+                let addr = self.addr_absolute(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x13 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x17 => {
+                let addr = self.addr_zero_page_x(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x1B => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x1F => {
+                let addr = self.addr_absolute_x(bus);
+                let val  = self.asl(bus.read(addr));
+                bus.write(addr, val);
+                self.a |= val;
+                self.set_zn(self.a);
+                true
+            }
+            // RLA: ROL memory then AND with A (unofficial)
+            0x23 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x27 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x2F => {
+                let addr = self.addr_absolute(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x33 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x37 => {
+                let addr = self.addr_zero_page_x(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x3B => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x3F => {
+                let addr = self.addr_absolute_x(bus);
+                let val  = self.rol(bus.read(addr));
+                bus.write(addr, val);
+                self.a &= val;
+                self.set_zn(self.a);
+                true
+            }
+            // SRE: LSR memory then EOR with A (unofficial)
+            0x43 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x47 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x4F => {
+                let addr = self.addr_absolute(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x53 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x57 => {
+                let addr = self.addr_zero_page_x(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x5B => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            0x5F => {
+                let addr = self.addr_absolute_x(bus);
+                let val  = self.lsr(bus.read(addr));
+                bus.write(addr, val);
+                self.a ^= val;
+                self.set_zn(self.a);
+                true
+            }
+            // RRA: ROR memory then ADC with A (unofficial)
+            0x63 => {
+                let addr = self.addr_indirect_x(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
+            0x67 => {
+                let addr = self.addr_zero_page(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
+            0x6F => {
+                let addr = self.addr_absolute(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
+            0x73 => {
+                let addr = self.addr_indirect_y(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
+            0x77 => {
+                let addr = self.addr_zero_page_x(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
+            0x7B => {
+                let addr = self.addr_absolute_y(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
+            0x7F => {
+                let addr = self.addr_absolute_x(bus);
+                let val  = self.ror(bus.read(addr));
+                bus.write(addr, val);
+                self.adc(val);
+                true
+            }
             0xEA => true, // NOP
 
             0x00 => false, // BRK: stop execution loop
 
             _ => {
-                panic!("Unknown opcode {:02X} at PC {:04X}", opcode, opcode_pc)
+                // Unofficial/undocumented opcodes — treat as NOP variants
+                // Consume operand bytes so PC advances correctly
+                match opcode {
+                    // 2-byte unofficial NOPs (read and discard 1 byte)
+                    0x04 | 0x44 | 0x64 |        // NOP zp
+                    0x14 | 0x34 | 0x54 | 0x74 | 0xD4 | 0xF4 | // NOP zp,x
+                    0x80 | 0x82 | 0x89 | 0xC2 | 0xE2 => {      // NOP imm
+                        self.fetch_byte(bus);
+                    }
+                    // 3-byte unofficial NOPs (read and discard 2 bytes)
+                    0x0C |                               // NOP abs
+                    0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => { // NOP abs,x
+                        self.fetch_word(bus);
+                    }
+                    // 1-byte unofficial NOPs (no operand)
+                    0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => {}
+                    _ => {
+                        panic!("Unknown opcode {:02X} at PC {:04X}", opcode, opcode_pc)
+                    }
+                }
+                true
             }
         }
     }
