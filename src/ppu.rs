@@ -442,24 +442,25 @@ impl Ppu {
             let attr = self.secondary_oam[i * 4 + 2];
             let x    = self.secondary_oam[i * 4 + 3];
 
-            let mut row = self.scanline - y - 1; // row within the sprite (0-7 or 0-15)
+            let mut row = self.scanline - y - 1;
             let flip_v  = attr & 0x80 != 0;
             let flip_h  = attr & 0x40 != 0;
 
             if flip_v { row = height - 1 - row; }
 
+            // Clamp row to valid range to prevent overflow
+            let row = row.max(0).min(height - 1) as u32;
+
             let (addr_lo, addr_hi) = if height == 8 {
-                // 8x8: PPUCTRL bit 3 selects pattern table
-                let base = if self.ctrl & 0x08 != 0 { 0x1000u16 } else { 0x0000 };
-                let a = base + tile * 16 + row as u16;
-                (a, a + 8)
+                let base = if self.ctrl & 0x08 != 0 { 0x1000u32 } else { 0x0000 };
+                let a = (base + tile as u32 * 16 + row) as u16;
+                (a, a.wrapping_add(8))
             } else {
-                // 8x16: tile bit 0 selects pattern table, top/bottom halves in consecutive tiles
-                let base      = if tile & 1 != 0 { 0x1000u16 } else { 0x0000 };
-                let tile_base = tile & 0xFE;
-                let half_off  = if row >= 8 { 16u16 } else { 0 };
-                let a = base + tile_base * 16 + half_off + (row & 7) as u16;
-                (a, a + 8)
+                let base      = if tile & 1 != 0 { 0x1000u32 } else { 0x0000 };
+                let tile_base = (tile & 0xFE) as u32;
+                let half_off  = if row >= 8 { 16u32 } else { 0 };
+                let a = (base + tile_base * 16 + half_off + (row & 7)) as u16;
+                (a, a.wrapping_add(8))
             };
 
             let mut lo = self.ppu_read(addr_lo);
