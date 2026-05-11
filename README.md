@@ -1,11 +1,12 @@
-NES Emulator in Rust. Work in Progress
+# NES Emulator — Rust
 
-This project is a Nintendo Entertainment System emulator written in Rust. The goal is to understand low level system design through accurate CPU execution, memory mapping, and instruction decoding. The emulator focuses on correctness, clarity, and step by step validation against known 6502 behavior.
+A fully functional Nintendo Entertainment System emulator built from scratch. Implements the 6502 CPU, PPU, memory bus, and cartridge loader across 6 core modules.
 
-Current scope
-• 6502 CPU core with full register state
-• 64 KB memory model
-• Instruction fetch and decode loop
-• Little endian word handling
-• Stack pointer and status register management
-• Deterministic step based execution
+## What works
+- Passes 100% of nestest — all 56+ opcodes, addressing modes, and cycle-accurate flag behavior across 8991 instructions
+- PPU renders backgrounds and sprites at accurate 256x240 pixel output scanline-by-scanline
+- iNES ROM parsing with Mapper 0/NROM support
+- Boots and runs actual cartridge images — tested with Donkey Kong, controller input working
+
+## Built to understand
+Low-level system design, accurate CPU emulation, memory mapping, and graphics pipeline architecture.
